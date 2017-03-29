@@ -1,0 +1,216 @@
+<?php
+function noticias_install() {
+    $type_values = array(
+	'op' => t('Save content type'),
+	'type' => 'noticia',
+	'name' => 'Noticia',
+	'orig_type' => '',
+	'old_type' => '',
+	'description' => t('Una <e>noticia</e> es una información acerca de un evento o suceso.'),
+	'help' => 'Mediante el sigueinte formulario usted puede registrar una noticia.',
+	'title_label' => 'Titulo',
+	'body_label' => 'Cuerpo',
+	'base' => '',
+	'custom' => '1',
+	'locked' => '0',
+	'modified' => '1'
+    );
+
+    $op = isset($type_values['op']) ? $type_values['op'] : '';
+
+    $type = node_type_set_defaults();
+
+    $type->type = trim($type_values['type']);
+    $type->name = trim($type_values['name']);
+    $type->orig_type = trim($type_values['orig_type']);
+    $type->old_type = isset($type_values['old_type']) ? $type_values['old_type'] : $type->type;
+
+    $type->description = $type_values['description'];
+    $type->help = $type_values['help'];
+    $type->title_label = $type_values['title_label'];
+    $type->body_label = $type_values['body_label'];
+
+    // title_label is required in core; has_title will always be true, unless a
+    // module alters the title field.
+    $type->has_title = ($type->title_label != '');
+    $type->has_body = ($type->body_label != '');
+
+    $type->base = !empty($type_values['base']) ? $type_values['base'] : 'node_content';
+    $type->custom = $type_values['custom'];
+    $type->modified = true;
+    $type->locked = $type_values['locked'];
+
+    // Saving the content type after saving the variables allows modules to act
+    // on those variables via hook_node_type_insert().
+    $status = node_type_save($type);
+
+    node_types_rebuild();
+    
+    $types = node_type_get_types();
+    node_add_body_field($types['noticia']);    
+
+    // Create all the fields we are adding to our content type.
+    foreach (_noticias_installed_fields() as $field) {
+        $field_exists = field_read_field($field['field_name'], array('include_inactive' => TRUE));
+		if (empty($field_exists))
+			field_create_field($field);
+    }
+
+    // Create all the instances for our fields.
+    foreach (_noticias_installed_instances() as $instance) {
+        $instance['entity_type'] = 'node';
+        $instance['bundle'] = 'noticia';
+        field_create_instance($instance);
+    }
+
+    $t_args = array('%name' => $type->name);
+
+    if ($status == SAVED_UPDATED) {
+		drupal_set_message(t('The content type %name has been updated.', $t_args));
+    }
+    elseif ($status == SAVED_NEW) {
+		drupal_set_message(t('The content type %name has been added.', $t_args));
+		watchdog('node', 'Added content type %name.', $t_args, WATCHDOG_NOTICE, l(t('view'), 'admin/structure/types'));
+    }
+}
+
+
+
+/**
+* Return a structured array defining the fields created by this content type.
+*/
+function _noticias_installed_fields() {
+    $t = get_t();
+    return array(
+        'field_autor' => array(
+            'field_name' => 'field_autor',
+            'label'      => $t('Autor'),
+            'type'       => 'text',
+        ),
+        'field_peso' => array(
+            'field_name' => 'field_peso',
+            'label'      => $t('Peso'),
+            'type'       => 'text',
+        ),
+        'field_fuente' => array(
+            'field_name' => 'field_fuente',
+            'label'      => $t('Fuente'),
+            'type'       => 'text',
+        ),
+	'field_image' => array(
+            'field_name' => 'field_image',
+            'label'      => $t('Imagen'),
+            'type'       => 'image',
+            'settings' => array(
+                'default_image' => 0,
+                'uri_scheme' => 'public',
+            ),
+        ),
+    );
+}
+
+
+/**
+* Return a structured array defining the instances for this content type.
+*/
+function _noticias_installed_instances() {
+    $t = get_t();
+    return array(
+        'field_autor' => array(
+            'field_name' => 'field_autor',            
+            'type'	=> 'text',
+            'label'	=> $t('Autor'),
+            'widget'=> array(
+                'type'	=> 'text_textfield',
+            ),
+        ),
+        'field_peso' => array(
+            'field_name' => 'field_peso',
+            'type' => 'text',
+            'label' => $t('Peso'),
+            'widget'=> array(
+                'type'	=> 'text_textfield', 
+            ),
+         ),
+        'field_fuente' => array(
+            'field_name' => 'field_fuente',            
+            'type' => 'text',
+            'label' => $t('Fuente'),
+            'widget'=> array(
+                'type'	=> 'text_textfield',                
+            ),
+         ),
+	// instance of the image field above
+        'field_image' => array(
+          'field_name' => 'field_image',
+          'label' => $t('Imagen'),
+          'cardinality' => 1,
+          'type' => 'field_image',
+          'settings' => array(
+            'alt_field' => 1,
+            'file_directory' => 'noticias',
+            'file_extensions' => 'png gif jpg jpeg',
+            'max_filesize' => '',
+            'max_resolution' => '',
+            'min_resolution' => '',
+            'title_field' => 1,
+            'user_register_form' => FALSE,
+          ),
+          'widget' => array(
+            'settings' => array(
+              'preview_image_style' => 'thumbnail',
+              'progress_indicator' => 'throbber',
+            ),
+          ),          
+        ),
+
+    );
+}
+
+
+
+/**
+* Implements hook_uninstall().
+*/
+function noticias_uninstall() {
+    // Gather all the example content that might have been created while this
+    // module was enabled.
+    $sql = 'SELECT nid FROM {node} n WHERE n.type = :type';
+    $result = db_query($sql, array(':type' => 'noticia'));
+    $nids = array();
+    foreach ($result as $row) {
+            $nids[] = $row->nid;
+    }
+
+    // Delete all the nodes at once
+    node_delete_multiple($nids);
+
+
+    // Loop over each of the fields defined by this module and delete
+    // all instances of the field, their data, and the field itself.
+    foreach (array_keys(_noticias_installed_fields()) as $field) {
+        $field_info = field_info_field($field['field_name']);
+		if (isset($field_info['bundles'])) {
+			if (isset($field_info['bundles']['node']) && count($field_info['bundles']['node']) == 1)
+				field_delete_field($field);
+		}
+    }
+
+
+    // Loop over any remaining field instances attached to the job_post
+    // content type (such as the body field) and delete them individually.
+    $instances = field_info_instances('node', 'noticia');
+    foreach ($instances as $instance_name => $instance) {
+        field_delete_instance($instance);
+    }
+
+    // Delete our content type.
+    node_type_delete('noticia');
+    
+    // Purge all field infromation
+    field_purge_batch(1000);
+}
+
+
+
+?>

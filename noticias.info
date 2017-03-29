@@ -1,0 +1,9 @@
+name = Noticias
+description = Gestión de noticias.
+package = NEWS
+core = 7.x
+dependencies[] = text
+files[] = noticia.install
+files[] = noticia.module
+version = VERSION
+
